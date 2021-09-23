@@ -2,6 +2,7 @@ package controllers
 
 import (
 	"github.com/gin-gonic/gin"
+	// "meteor/db"
 	"meteor/db"
 	. "meteor/models"
 )
@@ -13,10 +14,10 @@ func CreateOrUpdateProject(c *gin.Context) {
 		ResponseErr(c, err.Error())
 		return
 	}
-	if err := db.CreateOrUpdateProject(project); err != nil {
-		ResponseErr(c, err.Error())
-		return
-	}
+	// if err := db.CreateOrUpdateProject(project); err != nil {
+	// 	ResponseErr(c, err.Error())
+	// 	return
+	// }
 	ResponseSuccessNoData(c)
 }
 

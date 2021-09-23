@@ -2,7 +2,7 @@ package core
 
 
 type Sampler interface {
-	Request(SamplerConfig) Result
+	Request() Result
 }
 
 type SamplerConfig interface {

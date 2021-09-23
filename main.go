@@ -9,7 +9,7 @@ import (
 	"meteor/middlewares"
 	route "meteor/routers"
 
-	"github.com/elazarl/go-bindata-assetfs"
+	assetfs "github.com/elazarl/go-bindata-assetfs"
 	"github.com/gin-gonic/gin"
 	"gopkg.in/yaml.v2"
 )

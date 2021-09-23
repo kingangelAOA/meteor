@@ -1,49 +1,64 @@
 package core
 
 import (
+	"context"
 	"fmt"
+
 	"github.com/panjf2000/ants/v2"
-	_ "net/http/pprof"
 )
 
-type WrappedTask struct {
-	task   func()
-	status bool
-}
-
 type WrappedPool struct {
-	task       chan WrappedTask
-	p          *ants.Pool
-	readyClose chan int
+	p   *ants.PoolWithFunc
+	ctx context.Context
 }
 
-func NewPool(num int) (*WrappedPool, error) {
-	if p, err := ants.NewPool(num, ants.WithPreAlloc(true)); err != nil {
+func NewPool(num int, ctx context.Context, task func(wc interface{})) (*WrappedPool, error) {
+	if p, err := ants.NewPoolWithFunc(num, func(i interface{}) {
+		task(i)
+	}, ants.WithPreAlloc(true)); err != nil {
 		return nil, err
 	} else {
 		return &WrappedPool{
-			p:          p,
-			task:       make(chan WrappedTask),
-			readyClose: make(chan int),
+			p:   p,
+			ctx: ctx,
 		}, nil
 	}
 }
 
-func (rp *WrappedPool) AddTask(wt WrappedTask) {
-	rp.task <- wt
+func (rp *WrappedPool) SetNum(n int) {
+	rp.p.Tune(n)
 }
 
-func (rp *WrappedPool) Run() {
-	go func(rp *WrappedPool) {
+func (rp *WrappedPool) RunByLimit(l Limiter, data interface{}) {
+	go func(l Limiter, data interface{}) {
 		for {
-			wt := <-rp.task
-			if !wt.status {
+			err := l.Get()
+			if err != nil {
+				rp.p.Release()
 				break
 			}
-			if err := rp.p.Submit(wt.task); err != nil {
-				fmt.Println("******************************", err.Error())
+			rp.baseRun(data)
+		}
+	}(l, data)
+
+}
+
+func (rp *WrappedPool) Run(data interface{}) {
+	go func(ctx context.Context, data interface{}) {
+		for {
+			select {
+			case <-ctx.Done():
+				rp.p.Release()
+				return
+			default:
+				rp.baseRun(data)
 			}
 		}
-		rp.p.Release()
-	}(rp)
+	}(rp.ctx, data)
+}
+
+func (rp *WrappedPool) baseRun(data interface{}) {
+	if err := rp.p.Invoke(data); err != nil {
+		fmt.Println("******************************", err.Error())
+	}
 }

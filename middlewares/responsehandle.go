@@ -1,12 +1,13 @@
 package middlewares
 
 import (
-	"github.com/gin-gonic/gin"
 	"meteor/common"
 	"meteor/core"
 	. "meteor/models"
 	"net/http"
 	"strings"
+
+	"github.com/gin-gonic/gin"
 )
 
 func GlobalRecover(c *gin.Context) {

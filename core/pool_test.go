@@ -1,15 +1,13 @@
 package core
 
 import (
+	"context"
 	"fmt"
-	"log"
 	"math/rand"
-	"net/http"
 	_ "net/http/pprof"
 	"testing"
 	"time"
 )
-
 
 func test() {
 	t := rand.Intn(1000)
@@ -20,30 +18,21 @@ func test() {
 }
 
 func TestNewPool(t *testing.T) {
-	s := Sign{
-		Type: LIMIT,
-		Num:  10,
+	begin := time.Now()
+	parent := context.Background()
+	ctx, cancel := context.WithTimeout(parent, 10*time.Second)
+	wc := &WrappedContext{
+		Data: map[string]interface{}{},
 	}
-	s.Run()
-	go func() {
-		log.Println(http.ListenAndServe("0.0.0.0:14000", nil))
-	}()
-	rp, _ := NewPool(100)
-	rp.Run()
+	defer cancel()
+	l := NewLimiter(LimitConstantMode, 5, ctx)
+	p, _ := NewPool(1, ctx, task)
+	p.RunByLimit(l, wc)
+	fmt.Println("run time", time.Since(begin))
+	time.Sleep(15 * time.Second)
+}
 
-	go func(rp *WrappedPool) {
-		for {
-			s.Get()
-			rp.AddTask(WrappedTask{
-				task:   test,
-				status: true,
-			})
-		}
-		rp.AddTask(WrappedTask{
-			task:   test,
-			status: false,
-		})
-	}(rp)
-
-	time.Sleep(1000 * time.Second)
+func task(i interface{}) {
+	time.Sleep(2000 * time.Millisecond)
+	// fmt.Println("this is task")
 }

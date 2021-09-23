@@ -1,8 +1,9 @@
 package routers
 
 import (
-	"github.com/gin-gonic/gin"
 	"meteor/controllers"
+
+	"github.com/gin-gonic/gin"
 )
 
 //InitRoutes init routes

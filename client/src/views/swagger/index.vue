@@ -1,30 +1,30 @@
 <template>
   <div>
-    <div class="navbar">
-      <div class="left-menu">
-        <el-select v-model="version" placeholder="version" style="min-width: 30%">
-          <el-option v-for="item in versions" :key="item" :label="item" :value="item" />
-        </el-select>
-        <el-dropdown split-button type="primary" style="min-width: 10%" @command="handleDropdown" @click="saveOrCreate">
-          {{ $t('swagger.'+buttonText) }}
-          <el-dropdown-menu slot="dropdown">
-            <el-dropdown-item command="1">{{ $t('swagger.revertToLastSaved') }}</el-dropdown-item>
-          </el-dropdown-menu>
-        </el-dropdown>
-      </div>
-    </div>
+    <!--    <div class="navbar">-->
+    <!--      <div class="left-menu">-->
+    <!--        <el-select v-model="version" placeholder="version" style="min-width: 30%">-->
+    <!--          <el-option v-for="item in versions" :key="item" :label="item" :value="item" />-->
+    <!--        </el-select>-->
+    <!--        <el-dropdown split-button type="primary" style="min-width: 10%" @command="handleDropdown" @click="saveOrCreate">-->
+    <!--          {{ $t('swagger.'+buttonText) }}-->
+    <!--          <el-dropdown-menu slot="dropdown">-->
+    <!--            <el-dropdown-item command="1">{{ $t('swagger.revertToLastSaved') }}</el-dropdown-item>-->
+    <!--          </el-dropdown-menu>-->
+    <!--        </el-dropdown>-->
+    <!--      </div>-->
+    <!--    </div>-->
     <multipane class="vertical-panes" layout="vertical">
-      <el-menu default-active="1" style="height: 100%; overflow: scroll; width: 15%" @select="handleSideSelect">
-        <el-menu-item index="info">
-          <span slot="title" style="font-weight: bold">Info</span>
-        </el-menu-item>
-        <el-menu-item index="tags">
-          <span slot="title" style="font-weight: bold">Tags</span>
-        </el-menu-item>
-        <el-menu-item index="servers">
-          <span slot="title" style="font-weight: bold">Servers</span>
-        </el-menu-item>
-        <el-input v-model="searchPath" placeholder="请输入内容" prefix-icon="el-icon-search" />
+      <el-menu default-active="1" style="height: 100%; overflow: scroll; width: 25%" @select="handleSideSelect">
+        <el-form :inline="true" :model="formInline">
+          <el-form-item>
+            <el-input v-model="searchPath" placeholder="请输入内容" prefix-icon="el-icon-search" />
+          </el-form-item>
+          <el-form-item>
+            <i class="el-icon-circle-plus" />
+            <i class="el-icon-caret-bottom" />
+          </el-form-item>
+        </el-form>
+
         <el-submenu v-for="(tagObject, name, index) in interfaces" :key="index" :index="name">
           <template slot="title">
             <span class="item-title">{{ name }}</span>
