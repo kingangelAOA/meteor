@@ -1,6 +1,7 @@
 package core
 
 import (
+	"context"
 	"crypto/tls"
 	"fmt"
 	"io"
@@ -8,6 +9,13 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/panjf2000/ants/v2"
+	"github.com/pkg/errors"
+)
+
+var (
+	ErrorNewHttpServerPool = errors.New("new http pool error")
 )
 
 const (
@@ -16,7 +24,78 @@ const (
 	TypeText          = "TypeText"
 	TypeBinaryFile    = "TypeBinaryFile"
 	TypeNoBody        = "TypeNoBody"
+
+	RequestThreshold = 1000
 )
+
+type HttpService struct {
+	client   HttpClient
+	p        *ants.Pool
+	ctx      context.Context
+	ErrMsg   string
+	Code     int
+	requests chan *http.Request
+}
+
+func NewHttpService(timeout, size int, ctx context.Context) (*HttpService, error) {
+	p, err := ants.NewPool(size, ants.WithPreAlloc(true))
+	if err != nil {
+		return nil, ErrorNewHttpServerPool
+	}
+	return &HttpService{
+		client:   *NewHttpClient(timeout),
+		p:        p,
+		ctx:      ctx,
+		requests: make(chan *http.Request, RequestThreshold),
+	}, nil
+}
+
+func (hs *HttpService) Run() {
+	go hs.requestQueue(hs.requests)
+}
+
+func (hs *HttpService) requestQueue(chR chan *http.Request) {
+	defer func() {
+		r := recover()
+		if err, ok := r.(error); ok {
+			hs.Code = 500
+			hs.ErrMsg = err.Error()
+		}
+	}()
+	for {
+		select {
+		case <-hs.ctx.Done():
+			return
+		case pm := <-chR:
+			err := hs.p.Submit(func() {
+				hs.client.client.Do(pm)
+			})
+			if err != nil {
+				pm.SetErr(err.Error())
+			}
+		}
+	}
+}
+
+type Protocol interface {
+	Request(interface{}) *ProtocolResult
+}
+
+type ProtocolResult struct {
+}
+
+type HttpClient struct {
+	client *http.Client
+}
+
+func NewHttpClient(timeout int) *HttpClient {
+	return &HttpClient{
+		client: &http.Client{
+			Transport: http.DefaultTransport,
+			Timeout:   time.Duration(timeout) * time.Millisecond,
+		},
+	}
+}
 
 type WrappedHttp struct {
 	Method      string

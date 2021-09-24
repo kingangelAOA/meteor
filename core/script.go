@@ -31,7 +31,7 @@ func init() {
 	TengoVMPool = make(map[string]sync.Pool)
 }
 
-type ScriptServer struct {
+type ScriptService struct {
 	script   Script
 	ctx      context.Context
 	Code     int
@@ -40,12 +40,12 @@ type ScriptServer struct {
 	messages chan Message
 }
 
-func NewScriptServer(s Script, num int, ctx context.Context) (*ScriptServer, error) {
+func NewScriptService(s Script, num int, ctx context.Context) (*ScriptService, error) {
 	p, err := ants.NewPool(num, ants.WithPreAlloc(true))
 	if err != nil {
 		return nil, ErrorNewScriptServerPool
 	}
-	return &ScriptServer{
+	return &ScriptService{
 		script:   s,
 		ctx:      ctx,
 		p:        p,
@@ -53,11 +53,11 @@ func NewScriptServer(s Script, num int, ctx context.Context) (*ScriptServer, err
 	}, nil
 }
 
-func (ss *ScriptServer) Run() {
+func (ss *ScriptService) Run() {
 	go ss.messageQueue(ss.messages)
 }
 
-func (ss *ScriptServer) messageQueue(mCh chan Message) {
+func (ss *ScriptService) messageQueue(mCh chan Message) {
 	defer func() {
 		r := recover()
 		if err, ok := r.(error); ok {
@@ -80,7 +80,7 @@ func (ss *ScriptServer) messageQueue(mCh chan Message) {
 	}
 }
 
-func (ss *ScriptServer) PutMessage(m Message) {
+func (ss *ScriptService) PutMessage(m Message) {
 	ss.messages <- m
 }
 

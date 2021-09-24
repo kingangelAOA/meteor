@@ -60,7 +60,7 @@ func TestScriptServer(t *testing.T) {
 	parent := context.Background()
 	ctx, cancel := context.WithTimeout(parent, 1000*time.Second)
 	defer cancel()
-	ss, _ := NewScriptServer(newTengoScript(ctx), 1000, ctx)
+	ss, _ := NewScriptService(newTengoScript(ctx), 1000, ctx)
 	ss.Run()
 	tm := AcquireTengoMessage("test", &WrappedContext{
 		Data: map[string]interface{}{"test": "1"},
@@ -80,7 +80,7 @@ func BenchmarkScriptServer(b *testing.B) {
 	parent := context.Background()
 	ctx, cancel := context.WithTimeout(parent, 1000*time.Second)
 	defer cancel()
-	ss, _ := NewScriptServer(newTengoScript(ctx), 1000, ctx)
+	ss, _ := NewScriptService(newTengoScript(ctx), 1000, ctx)
 	ss.Run()
 	for n := 0; n < b.N; n++ {
 		tm := AcquireTengoMessage("test", &WrappedContext{
