@@ -3,7 +3,7 @@ package core
 import "context"
 
 type Stage interface {
-	Run(p *WrappedContext) *WrappedContext
+	Run(p *Shared) *Shared
 }
 
 func ConnectSingleCoroutineNode(nodes []Node) Node {
@@ -21,19 +21,19 @@ func ConnectMultiCoroutineNode(nodes []Node, num int, ctx context.Context) (*Wra
 	return NewPool(num, ctx, node.Execute)
 }
 
-type MultiCoroutineStage struct {
+type SingleCoroutineStage struct {
 	beginNode Node
 }
 
-func (mcs *MultiCoroutineStage) Run(wc *WrappedContext) {
-	mcs.beginNode.Execute(wc)
+func (mcs *SingleCoroutineStage) Run(s *Shared) {
+	mcs.beginNode.Execute(s)
 }
 
-type SingleCoroutineStage struct {
+type MultiCoroutineStage struct {
 	pool    WrappedPool
 	limiter Limiter
 }
 
-func (scs *SingleCoroutineStage) Run(wc *WrappedContext) {
-	scs.pool.RunByLimit(scs.limiter, wc)
+func (scs *MultiCoroutineStage) Run(s *Shared) {
+	scs.pool.RunByLimit(scs.limiter, s)
 }

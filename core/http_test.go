@@ -1,10 +1,25 @@
 package core
 
 import (
-	"net/http"
+	"encoding/json"
+	"strconv"
 	"testing"
 )
 
-func TestHttp(t *testing.T) {
-	http.Client.Transport
+func BenchmarkHttp(b *testing.B) {
+	var a float64
+
+	a = 1.324234234234
+	for n := 0; n < b.N; n++ {
+		strconv.FormatFloat(a, 'E', -1, 32)
+	}
+}
+
+func BenchmarkHttp1(b *testing.B) {
+	var a interface{}
+
+	a = 1.324234234234
+	for n := 0; n < b.N; n++ {
+		json.Marshal(a)
+	}
 }
