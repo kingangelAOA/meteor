@@ -6,7 +6,8 @@ type Node interface {
 }
 
 type HttpNode struct {
-	next Node
+	WrappedRequest WrappedRequest
+	next           Node
 }
 
 func (hn *HttpNode) SetNext(node Node) {

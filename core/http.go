@@ -39,8 +39,9 @@ const (
 	TypeBinaryFile        = "TypeBinaryFile"
 	TypeNoBody            = "TypeNoBody"
 
-	RequestThreshold = 1000
-	Timeout          = 10
+	InitialHttpServicePool = 1000
+	RequestThreshold       = 1000
+	Timeout                = 10
 )
 
 type HttpService struct {
@@ -50,9 +51,7 @@ type HttpService struct {
 
 func NewHttpService(size int, ctx context.Context) (*HttpService, error) {
 	hs := &HttpService{
-		client: &Http{
-			client: NewHttpClient(Timeout),
-		},
+		client: NewHttpClient(Timeout),
 	}
 	p, err := ants.NewPool(size, ants.WithPanicHandler(func(p interface{}) {
 		hs.PutErrMsg(fmt.Sprintf("worker exits from a panic: %v\n", p))
@@ -65,10 +64,12 @@ func NewHttpService(size int, ctx context.Context) (*HttpService, error) {
 	return hs, nil
 }
 
-func NewHttpClient(timeout int) *http.Client {
-	return &http.Client{
-		Transport: http.DefaultTransport,
-		Timeout:   time.Duration(timeout) * time.Millisecond,
+func NewHttpClient(timeout int) *Http {
+	return &Http{
+		client: &http.Client{
+			Transport: http.DefaultTransport,
+			Timeout:   time.Duration(timeout) * time.Millisecond,
+		},
 	}
 }
 
@@ -219,6 +220,7 @@ func (wr *WrappedRequest) GetRequest() (*http.Request, error) {
 	}
 	return r, nil
 }
+
 func (wr *WrappedRequest) getUrl() string {
 	wr.s.UpdateBaseContent(wr.Path)
 	if wr.Port != "" {

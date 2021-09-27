@@ -26,7 +26,6 @@ func InitMongo(m configs.Mongo) {
 	if err != nil {
 		panic(err)
 	}
-
 	Mongo = &MongoDB{
 		Client:  client,
 		Timeout: m.Timeout,
