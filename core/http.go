@@ -10,9 +10,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
-	"regexp"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/panjf2000/ants/v2"
@@ -23,12 +21,8 @@ var (
 	ErrorNewHttpServerPool = errors.New("new http pool error")
 )
 
-var (
-	WrappedRequestPool map[string]*sync.Pool
-)
-
 func init() {
-	WrappedRequestPool = make(map[string]*sync.Pool)
+	// RequestPool = sync.Pool{}
 }
 
 const (
@@ -41,7 +35,7 @@ const (
 
 	InitialHttpServicePool = 1000
 	RequestThreshold       = 1000
-	Timeout                = 10
+	DefaultTimeout         = 10000
 )
 
 type HttpService struct {
@@ -49,9 +43,9 @@ type HttpService struct {
 	client *Http
 }
 
-func NewHttpService(size int, ctx context.Context) (*HttpService, error) {
+func NewHttpService(timeout, size int, ctx context.Context) (*HttpService, error) {
 	hs := &HttpService{
-		client: NewHttpClient(Timeout),
+		client: NewHttpClient(timeout),
 	}
 	p, err := ants.NewPool(size, ants.WithPanicHandler(func(p interface{}) {
 		hs.PutErrMsg(fmt.Sprintf("worker exits from a panic: %v\n", p))
@@ -65,6 +59,9 @@ func NewHttpService(size int, ctx context.Context) (*HttpService, error) {
 }
 
 func NewHttpClient(timeout int) *Http {
+	if timeout == 0 {
+		timeout = DefaultTimeout
+	}
 	return &Http{
 		client: &http.Client{
 			Transport: http.DefaultTransport,
@@ -110,6 +107,7 @@ func (h *Http) Execute(m Message) {
 		hm.SetErr(err.Error())
 		return
 	}
+	defer ReleaseRequest(hm.Request)
 	defer res.Body.Close()
 	body, err := ioutil.ReadAll(res.Body)
 	if err != nil {
@@ -131,39 +129,26 @@ type HttpMessage struct {
 	Body       string
 }
 
-func NewHttpMessage(s *Shared, wr *WrappedRequest) (*HttpMessage, error) {
-	r, err := wr.GetRequest()
-	if err != nil {
-		return nil, err
-	}
+func NewHttpMessage(hr *http.Request, s *Shared) *HttpMessage {
 	return &HttpMessage{
-		BaseMessage: BaseMessage{
-			s:  s,
-			Ok: make(chan bool, 1),
-		},
-		Request:    r,
-		ResHeader:  make(http.Header),
-		ResCookies: map[string]string{},
-	}, nil
+		BaseMessage: NewBaseMessage(s),
+		Request:     hr,
+		ResHeader:   make(http.Header),
+		ResCookies:  map[string]string{},
+	}
 }
 
 func (hm *HttpMessage) GetName() string {
 	return hm.Name
 }
 
-func (hm *HttpMessage) Reset() {
+func (hm *HttpMessage) Reset() *Shared {
 	hm.Body = ""
 	hm.ResHeader = make(http.Header)
 	hm.ResCookies = map[string]string{}
-	for {
-		if len(hm.Ok) > 0 {
-			<-hm.Ok
-		} else {
-			break
-		}
-	}
 	hm.ErrMsg = ""
 	hm.Prints = ""
+	return hm.BaseMessage.reset()
 }
 
 func (hm *HttpMessage) GetCookie(key string) (string, error) {
@@ -192,65 +177,48 @@ type WrappedRequest struct {
 	Body   Body
 	Header map[string]*BaseContent
 	Query  map[string]*BaseContent
-	s      *Shared
+	Ctx    context.Context
 }
 
 func (wr *WrappedRequest) Reset() {
-	wr.s.Reset()
+	wr.Path.Reset()
+	wr.Body.Reset()
+	for _, v := range wr.Header {
+		v.Reset()
+	}
+	for _, v := range wr.Query {
+		v.Reset()
+	}
 }
 
-func (wr *WrappedRequest) GetRequest() (*http.Request, error) {
-	body, contentType, err := wr.Body.GetContent(wr.s)
+func (wr WrappedRequest) GetRequest(s *Shared) (*http.Request, error) {
+	body, contentType, err := wr.Body.GetContent(s)
 	if err != nil {
 		return nil, err
 	}
-	r, err := http.NewRequest(wr.Method, wr.getUrl(), body)
+	r, err := AcquireRequest(wr.Method, wr.getUrl(s), body, wr.Ctx)
 	if err != nil {
 		return nil, err
 	}
 	for k, v := range wr.Header {
-		wr.s.UpdateBaseContent(v)
+		s.UpdateBaseContent(v)
 		r.Header.Add(k, v.Content)
 	}
 	r.Header.Set("ContentType", contentType)
 	q := r.URL.Query()
 	for k, v := range wr.Query {
-		wr.s.UpdateBaseContent(v)
+		s.UpdateBaseContent(v)
 		q.Add(k, v.Content)
 	}
 	return r, nil
 }
 
-func (wr *WrappedRequest) getUrl() string {
-	wr.s.UpdateBaseContent(wr.Path)
+func (wr *WrappedRequest) getUrl(s *Shared) string {
+	s.UpdateBaseContent(wr.Path)
 	if wr.Port != "" {
-
 		return fmt.Sprintf("%s:%s%s", wr.Host, wr.Port, wr.Path)
 	}
 	return fmt.Sprintf("%s%s", wr.Host, wr.Path)
-}
-
-func AcquireWrappedRequest(name string) *WrappedRequest {
-	if p, ok := WrappedRequestPool[name]; ok {
-		v := p.Get()
-		if v == nil {
-			return &WrappedRequest{}
-		}
-		return v.(*WrappedRequest)
-	} else {
-		WrappedRequestPool[name] = &sync.Pool{}
-		return &WrappedRequest{}
-	}
-}
-
-func ReleaseWrappedRequest(wr *WrappedRequest) {
-	wr.Reset()
-	if p, ok := WrappedRequestPool[wr.Name]; ok {
-		p.Put(wr)
-	} else {
-		WrappedRequestPool[wr.Name] = &sync.Pool{}
-		WrappedRequestPool[wr.Name].Put(wr)
-	}
 }
 
 type BaseContent struct {
@@ -258,8 +226,23 @@ type BaseContent struct {
 	Keys    map[string]string
 }
 
+func (bc *BaseContent) Reset() {
+	bc.Content = ""
+}
+
+func (bc *BaseContent) UpdateContent(s *Shared) error {
+	for k, v := range bc.Keys {
+		rv, err := s.GetString(k)
+		if err != nil {
+			return err
+		}
+		bc.Content = strings.Replace(bc.Content, v, rv, -1)
+	}
+	return nil
+}
+
 func NewBaseContent(content string) (*BaseContent, error) {
-	keys, err := regularKey(content)
+	keys, err := RegularKey(content)
 	if err != nil {
 		return nil, err
 	}
@@ -271,6 +254,7 @@ func NewBaseContent(content string) (*BaseContent, error) {
 
 type Body interface {
 	GetContent(*Shared) (io.ReadCloser, string, error)
+	Reset()
 }
 
 type MultipartForm struct {
@@ -281,6 +265,10 @@ type MultipartValue struct {
 	Type  string
 	Value interface{}
 	Keys  map[string]string
+}
+
+func (mv *MultipartValue) reset() {
+	ClearValue(mv.Value)
 }
 
 func NewMultipartValue(t string, value interface{}) *MultipartValue {
@@ -295,7 +283,7 @@ func NewMultipartForm(content map[string]*MultipartValue) (*MultipartForm, error
 	for _, v := range content {
 		if v.Type == TypeMultiPartFormText {
 			keys := map[string]string{}
-			subKeys, err := regularKey(v.Value.(string))
+			subKeys, err := RegularKey(v.Value.(string))
 			if err != nil {
 				return nil, err
 			}
@@ -345,9 +333,17 @@ func (mf *MultipartForm) GetContent(s *Shared) (io.Reader, string, error) {
 			if _, err := wf.Write(b); err != nil {
 				return nil, "", errors.New("write multipart form file error")
 			}
+		} else {
+			return nil, "", errors.Errorf("does not support this type '%s'", mv.Type)
 		}
 	}
 	return bodyBuffer, contentType, nil
+}
+
+func (mf *MultipartForm) Reset() {
+	for _, v := range mf.Content {
+		v.reset()
+	}
 }
 
 type FormURLEncode struct {
@@ -396,17 +392,4 @@ func (b *Binary) GetContent() (io.Reader, string, error) {
 }
 
 type Auth interface {
-}
-
-func regularKey(content string) (map[string]string, error) {
-	re, err := regexp.Compile(`\$\{(.*?)\}`)
-	if err != nil {
-		return nil, errors.New(fmt.Sprintf("regularKey error, regexp.Compile error: %s", err.Error()))
-	}
-	sm := re.FindAllSubmatch([]byte(content), -1)
-	result := make(map[string]string)
-	for _, v := range sm {
-		result[string(v[1])] = string(v[0])
-	}
-	return result, nil
 }

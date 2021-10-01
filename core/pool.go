@@ -9,19 +9,19 @@ import (
 )
 
 type WrappedPool struct {
-	p      *ants.PoolWithFunc
+	p      *ants.Pool
 	ctx    context.Context
 	ErrMsg chan string
+	task   func()
 }
 
-func NewPool(num int, ctx context.Context, task func(wc interface{})) (*WrappedPool, error) {
+func NewPool(num int, ctx context.Context, task func()) (*WrappedPool, error) {
 	wp := &WrappedPool{
 		ctx:    ctx,
 		ErrMsg: make(chan string, ErrMsgThreshold),
+		task:   task,
 	}
-	if p, err := ants.NewPoolWithFunc(num, func(i interface{}) {
-		task(i)
-	}, ants.WithPanicHandler(func(p interface{}) {
+	if p, err := ants.NewPool(num, ants.WithPanicHandler(func(p interface{}) {
 		wp.PutErrMsg(fmt.Sprintf("worker exits from a panic: %v\n", p))
 	}), ants.WithExpiryDuration(ExpiryDuration*time.Minute)); err != nil {
 		return nil, err
@@ -43,35 +43,35 @@ func (wp *WrappedPool) SetNum(n int) {
 }
 
 func (rp *WrappedPool) RunByLimit(l Limiter, data interface{}) {
-	go func(l Limiter, data interface{}) {
+	go func(l Limiter) {
 		for {
 			err := l.Get()
 			if err != nil {
 				rp.p.Release()
 				break
 			}
-			rp.baseRun(data)
+			rp.baseRun()
 		}
-	}(l, data)
+	}(l)
 
 }
 
-func (rp *WrappedPool) Run(data interface{}) {
-	go func(ctx context.Context, data interface{}) {
+func (rp *WrappedPool) Run() {
+	go func(ctx context.Context) {
 		for {
 			select {
 			case <-ctx.Done():
 				rp.p.Release()
 				return
 			default:
-				rp.baseRun(data)
+				rp.baseRun()
 			}
 		}
-	}(rp.ctx, data)
+	}(rp.ctx)
 }
 
-func (wp *WrappedPool) baseRun(data interface{}) {
-	if err := wp.p.Invoke(data); err != nil {
+func (wp *WrappedPool) baseRun() {
+	if err := wp.p.Submit(wp.task); err != nil {
 		wp.PutErrMsg(err.Error())
 	}
 }

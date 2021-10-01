@@ -3,19 +3,18 @@ package core
 import (
 	"context"
 	"fmt"
-	"math/rand"
 	_ "net/http/pprof"
 	"testing"
 	"time"
 )
 
-func test() {
-	t := rand.Intn(1000)
-	local := time.Now()
-	time.Sleep(time.Duration(t) * time.Millisecond)
+// func test() {
+// 	t := rand.Intn(1000)
+// 	local := time.Now()
+// 	time.Sleep(time.Duration(t) * time.Millisecond)
 
-	fmt.Println("Hello World!*********", t, local)
-}
+// 	fmt.Println("Hello World!*********", t, local)
+// }
 
 func TestNewPool(t *testing.T) {
 	begin := time.Now()
@@ -32,7 +31,7 @@ func TestNewPool(t *testing.T) {
 	time.Sleep(15 * time.Second)
 }
 
-func task(i interface{}) {
+func task() {
 	time.Sleep(2000 * time.Millisecond)
-	// fmt.Println("this is task")
+	fmt.Println("this is task")
 }

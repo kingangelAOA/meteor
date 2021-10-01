@@ -19,6 +19,7 @@ type Service interface {
 
 type Message interface {
 	GetName() string
+	Reset() *Shared
 	GetShared() *Shared
 	SetShared(map[string]interface{})
 	SetErr(string)
@@ -66,14 +67,37 @@ type BaseMessage struct {
 	Prints string
 }
 
+func NewBaseMessage(s *Shared) BaseMessage {
+	return BaseMessage{
+		s:  s,
+		Ok: make(chan bool, 1),
+	}
+}
+
+func (bm *BaseMessage) reset() *Shared {
+	for {
+		if len(bm.Ok) > 0 {
+			<-bm.Ok
+		} else {
+			break
+		}
+	}
+	ns := bm.s.CopyShared()
+	bm.s = nil
+	return ns
+
+}
+
 func (bm *BaseMessage) GetShared() *Shared {
 	return bm.s
 }
 
 func (bm *BaseMessage) SetShared(data map[string]interface{}) {
 	for k, v := range data {
+		// fmt.Println(k, v)
 		bm.s.Set(k, v)
 	}
+	// fmt.Println("*********", bm.s.Data)
 }
 
 func (bm *BaseMessage) SetErr(msg string) {

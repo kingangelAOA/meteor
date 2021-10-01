@@ -5,7 +5,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"sync"
 	"time"
 
 	"github.com/d5/tengo/v2"
@@ -24,15 +23,10 @@ var (
 	ErrorNewScriptServerPool = errors.New("new script pool error")
 )
 
-var (
-	TengoVMPool      map[string]*sync.Pool
-	TengoMessagePool *sync.Pool
-)
-
-func init() {
-	TengoVMPool = make(map[string]*sync.Pool)
-	TengoMessagePool = &sync.Pool{}
-}
+// func init() {
+// 	TengoVMPool = make(map[string]*sync.Pool)
+// 	TengoMessagePool = &sync.Pool{}
+// }
 
 type ScriptService struct {
 	BaseService
@@ -99,39 +93,18 @@ type TengoMessage struct {
 
 func NewTengoMessage(name string, s *Shared) *TengoMessage {
 	return &TengoMessage{
-		Name: name,
-		BaseMessage: BaseMessage{
-			s:  s,
-			Ok: make(chan bool, 1),
-		},
+		Name:        name,
+		BaseMessage: NewBaseMessage(s),
 	}
 }
 
-func (tm *TengoMessage) Reset() {
+func (tm *TengoMessage) Reset() *Shared {
 	tm.Name = ""
-	if len(tm.Ok) == 1 {
-		<-tm.Ok
-	}
+	return tm.BaseMessage.reset()
 }
 
 func (tm *TengoMessage) GetName() string {
 	return tm.Name
-}
-
-func AcquireTengoMessage(name string, s *Shared) *TengoMessage {
-	v := TengoMessagePool.Get()
-	if v == nil {
-		return NewTengoMessage(name, s)
-	}
-	tm := v.(*TengoMessage)
-	tm.Name = name
-	tm.s = s
-	return tm
-}
-
-func ReleaseTengoMessage(tm *TengoMessage) {
-	tm.Reset()
-	TengoMessagePool.Put(tm)
 }
 
 type Script interface {
@@ -155,7 +128,14 @@ func (tvm *TengoVM) Reset() {
 func (tvm *TengoVM) Run(m Message, ctx context.Context) {
 	tvm.script.Add(ScriptCtx, m.GetShared().Data)
 	tvm.script.Add(ScriptPrints, []interface{}{})
+	// f := os.NewFile(1, "cache")
+	// old := os.Stdout
+	// os.Stdout = f
 	compiled, err := tvm.script.RunContext(ctx)
+	// f.Sync()
+	// os.Stdout = old
+	// b, _ := ioutil.ReadAll(f)
+	// fmt.Println("*******", f)
 	errMsg := []string{}
 	if err != nil {
 		errMsg = append(errMsg, fmt.Sprintf("tengo script run error: %s", err.Error()))
@@ -166,11 +146,15 @@ func (tvm *TengoVM) Run(m Message, ctx context.Context) {
 		} else {
 			errMsg = append(errMsg, "tengo script run error: ctx is not map")
 		}
-
 		if out, ok := compiled.Get(ScriptPrints).Value().([]interface{}); ok {
+
 			buffer := bytes.Buffer{}
 			for _, v := range out {
-				buffer.WriteString(v.(string))
+				s, err := ToString(v)
+				if err != nil {
+					errMsg = append(errMsg, fmt.Sprintf("tengo script run error: %s", err.Error()))
+				}
+				buffer.WriteString(s)
 				buffer.WriteString("\n")
 			}
 			m.SetPrints(buffer.String())
@@ -188,36 +172,6 @@ func (tvm *TengoVM) Run(m Message, ctx context.Context) {
 		m.SetErr(buffer.String())
 	} else {
 		m.SetOk(true)
-	}
-}
-
-func AcquireTengoVM(name, code string) *TengoVM {
-	if pool, ok := TengoVMPool[name]; ok {
-		v := pool.Get()
-		if v == nil {
-			return &TengoVM{
-				name:   name,
-				script: newTengoVM(code),
-			}
-		}
-		return v.(*TengoVM)
-	} else {
-		TengoVMPool[name] = &sync.Pool{}
-		return &TengoVM{
-			name:   name,
-			script: newTengoVM(code),
-		}
-	}
-}
-
-func ReleaseTengoVM(tvm *TengoVM) {
-	tvm.Reset()
-	if v, ok := TengoVMPool[tvm.name]; ok {
-		v.Put(tvm)
-	} else {
-		pool := &sync.Pool{}
-		pool.Put(tvm)
-		TengoVMPool[tvm.name] = pool
 	}
 }
 

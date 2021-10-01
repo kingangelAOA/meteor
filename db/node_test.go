@@ -3,7 +3,6 @@ package db
 import (
 	"fmt"
 	"meteor/configs"
-	"meteor/models"
 	"testing"
 )
 
@@ -22,7 +21,7 @@ func init() {
 func TestNode(t *testing.T) {
 	ctx, cancel, c := getCollection("node")
 	defer cancel()
-	id, err := c.InsertOne(ctx, &models.Node{Name: "test", Type: "SCRIPT"})
+	id, err := c.InsertOne(ctx, &Node{Name: "test", Type: "SCRIPT"})
 	if err != nil {
 		fmt.Println(err.Error())
 	} else {
