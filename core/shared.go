@@ -22,11 +22,11 @@ func NewShared(data map[string]interface{}) *Shared {
 }
 
 func (s *Shared) CopyShared() *Shared {
-	nd := CopyMap(s.Data)
-	ns := AcquireShared(nd)
-	return &Shared{
-		Data: ns.Data,
+	ns := &Shared{
+		Data: make(map[string]interface{}),
 	}
+	ns.SetData(s.Data)
+	return ns
 }
 
 func (s *Shared) Reset() {
@@ -59,12 +59,14 @@ func (s *Shared) GetString(key string) (string, error) {
 	return ToString(rv)
 }
 
-func (c *Shared) Set(key string, value interface{}) {
-	c.Data[key] = value
+func (s *Shared) Set(key string, value interface{}) {
+	s.Data[key] = value
 }
 
-func (c *Shared) SetData(data map[string]interface{}) {
-	c.Data = data
+func (s *Shared) SetData(data map[string]interface{}) {
+	for k, v := range data {
+		s.Set(k, v)
+	}
 }
 
 // func (s *Shared) UpdateString(str string) (string, error) {

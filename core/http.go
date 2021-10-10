@@ -101,6 +101,7 @@ type Http struct {
 }
 
 func (h *Http) Execute(m Message) {
+	defer m.TimeCost()
 	hm := m.(*HttpMessage)
 	res, err := h.client.Do(hm.Request)
 	if err != nil {
@@ -122,33 +123,33 @@ func (h *Http) Execute(m Message) {
 
 type HttpMessage struct {
 	BaseMessage
-	Name       string
+	Key        string
 	Request    *http.Request
 	ResHeader  http.Header
 	ResCookies map[string]string
 	Body       string
 }
 
-func NewHttpMessage(hr *http.Request, s *Shared) *HttpMessage {
+func NewHttpMessage(hr *http.Request, data map[string]interface{}) *HttpMessage {
 	return &HttpMessage{
-		BaseMessage: NewBaseMessage(s),
+		BaseMessage: NewBaseMessage(data),
 		Request:     hr,
 		ResHeader:   make(http.Header),
 		ResCookies:  map[string]string{},
 	}
 }
 
-func (hm *HttpMessage) GetName() string {
-	return hm.Name
+func (hm *HttpMessage) GetKey() string {
+	return hm.Key
 }
 
-func (hm *HttpMessage) Reset() *Shared {
+func (hm *HttpMessage) Reset() {
 	hm.Body = ""
 	hm.ResHeader = make(http.Header)
 	hm.ResCookies = map[string]string{}
 	hm.ErrMsg = ""
 	hm.Prints = ""
-	return hm.BaseMessage.reset()
+	hm.BaseMessage.reset()
 }
 
 func (hm *HttpMessage) GetCookie(key string) (string, error) {

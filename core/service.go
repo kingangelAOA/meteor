@@ -2,6 +2,7 @@ package core
 
 import (
 	"context"
+	"time"
 
 	"github.com/panjf2000/ants/v2"
 )
@@ -18,10 +19,12 @@ type Service interface {
 }
 
 type Message interface {
-	GetName() string
-	Reset() *Shared
-	GetShared() *Shared
-	SetShared(map[string]interface{})
+	GetKey() string
+	SetData(map[string]interface{})
+	GetData() map[string]interface{}
+	Reset()
+	TimeCost() func()
+	GetStat() Stat
 	SetErr(string)
 	SetOk(bool)
 	GetPrints() string
@@ -61,20 +64,40 @@ func (ss *BaseService) PutMessage(m Message) {
 }
 
 type BaseMessage struct {
-	s      *Shared
-	Ok     chan bool
-	ErrMsg string
-	Prints string
+	Data    map[string]interface{}
+	Ok      chan bool
+	endTime time.Time
+	elapsed int
+	ErrMsg  string
+	Prints  string
 }
 
-func NewBaseMessage(s *Shared) BaseMessage {
+func NewBaseMessage(data map[string]interface{}) BaseMessage {
 	return BaseMessage{
-		s:  s,
-		Ok: make(chan bool, 1),
+		Data: data,
+		Ok:   make(chan bool, 1),
 	}
 }
 
-func (bm *BaseMessage) reset() *Shared {
+func (bm *BaseMessage) GetStat() Stat {
+	return Stat{
+		endTime: bm.endTime,
+		elapsed: bm.elapsed,
+	}
+}
+
+func (bm *BaseMessage) TimeCost() func() {
+	begin := time.Now()
+	return func() {
+		end := time.Now()
+		bm.elapsed = int(end.UnixMilli() - begin.UnixMilli())
+		bm.endTime = end
+	}
+}
+
+func (bm *BaseMessage) reset() {
+	bm.ErrMsg = ""
+	bm.Prints = ""
 	for {
 		if len(bm.Ok) > 0 {
 			<-bm.Ok
@@ -82,22 +105,17 @@ func (bm *BaseMessage) reset() *Shared {
 			break
 		}
 	}
-	ns := bm.s.CopyShared()
-	bm.s = nil
-	return ns
-
+	ClearMap(bm.Data)
 }
 
-func (bm *BaseMessage) GetShared() *Shared {
-	return bm.s
-}
-
-func (bm *BaseMessage) SetShared(data map[string]interface{}) {
+func (bm *BaseMessage) SetData(data map[string]interface{}) {
 	for k, v := range data {
-		// fmt.Println(k, v)
-		bm.s.Set(k, v)
+		bm.Data[k] = v
 	}
-	// fmt.Println("*********", bm.s.Data)
+}
+
+func (bm *BaseMessage) GetData() map[string]interface{} {
+	return bm.Data
 }
 
 func (bm *BaseMessage) SetErr(msg string) {

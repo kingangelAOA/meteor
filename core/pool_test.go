@@ -20,13 +20,10 @@ func TestNewPool(t *testing.T) {
 	begin := time.Now()
 	parent := context.Background()
 	ctx, cancel := context.WithTimeout(parent, 10*time.Second)
-	s := &Shared{
-		Data: map[string]interface{}{},
-	}
 	defer cancel()
 	l := NewLimiter(LimitConstantMode, 5, ctx)
 	p, _ := NewPool(1, ctx, task)
-	p.RunByLimit(l, s)
+	p.RunByLimit(l)
 	fmt.Println("run time", time.Since(begin))
 	time.Sleep(15 * time.Second)
 }

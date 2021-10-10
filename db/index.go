@@ -6,6 +6,7 @@ import (
 	"meteor/configs"
 	"time"
 
+	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
 )
@@ -21,7 +22,6 @@ type MongoDB struct {
 
 //InitMongo *mongo.Client
 func InitMongo(m configs.Mongo) {
-	fmt.Println(m.GetMongoUrl())
 	client, err := mongo.Connect(context.TODO(), options.Client().ApplyURI(m.GetMongoUrl()))
 	if err != nil {
 		panic(err)
@@ -54,6 +54,20 @@ func (m *MongoDB) getConnectCtx() (context.Context, context.CancelFunc) {
 
 func getCollection(c string) (context.Context, context.CancelFunc, *mongo.Collection) {
 	ctx, cancel := Mongo.getConnectCtx()
-	p := Mongo.Client.Database(DataBase).Collection(c)
-	return ctx, cancel, p
+	col := Mongo.Client.Database(DataBase).Collection(c)
+	return ctx, cancel, col
+}
+
+type DBRef struct {
+	Ref string             `bson:"$ref"`
+	ID  primitive.ObjectID `bson:"$id"`
+	DB  string             `bson:"$db"`
+}
+
+func NewDBRef(ref string, id primitive.ObjectID) DBRef {
+	return DBRef{
+		Ref: ref,
+		ID:  id,
+		DB:  DataBase,
+	}
 }

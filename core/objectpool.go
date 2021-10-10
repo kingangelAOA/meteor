@@ -8,11 +8,12 @@ import (
 )
 
 var (
-	RequestPool      sync.Pool
-	HttpMessagePool  sync.Pool
-	TengoVMPool      = make(map[string]sync.Pool)
-	TengoMessagePool sync.Pool
-	SharedPool       sync.Pool
+	RequestPool       sync.Pool
+	HttpMessagePool   sync.Pool
+	TengoVMPool       = make(map[string]sync.Pool)
+	ScriptMessagePool sync.Pool
+	SharedPool        sync.Pool
+	SharedMapPool     sync.Pool
 )
 
 func AcquireRequest(method, url string, body io.Reader, ctx context.Context) (*http.Request, error) {
@@ -27,34 +28,33 @@ func ReleaseRequest(hr *http.Request) {
 	RequestPool.Put(hr)
 }
 
-func AcquireHttpMessage(hr *http.Request, s *Shared) *HttpMessage {
+func AcquireHttpMessage(hr *http.Request, data map[string]interface{}) *HttpMessage {
 	v := HttpMessagePool.Get()
 	if v == nil {
-		return NewHttpMessage(hr, s)
+		return NewHttpMessage(hr, data)
 	}
 	return v.(*HttpMessage)
 }
 
-func ReleaseHttpMessage(hm *HttpMessage) *Shared {
-	s := hm.Reset()
+func ReleaseHttpMessage(hm *HttpMessage) {
+	hm.Reset()
 	RequestPool.Put(hm)
-	return s
 }
 
-func AcquireTengoVM(name, code string) *TengoVM {
-	if pool, ok := TengoVMPool[name]; ok {
+func AcquireTengoVM(key, code string) *TengoVM {
+	if pool, ok := TengoVMPool[key]; ok {
 		v := pool.Get()
 		if v == nil {
 			return &TengoVM{
-				name:   name,
+				key:    key,
 				script: newTengoVM(code),
 			}
 		}
 		return v.(*TengoVM)
 	} else {
-		TengoVMPool[name] = sync.Pool{}
+		TengoVMPool[key] = sync.Pool{}
 		return &TengoVM{
-			name:   name,
+			key:    key,
 			script: newTengoVM(code),
 		}
 	}
@@ -62,45 +62,45 @@ func AcquireTengoVM(name, code string) *TengoVM {
 
 func ReleaseTengoVM(tvm *TengoVM) {
 	tvm.Reset()
-	if v, ok := TengoVMPool[tvm.name]; ok {
+	if v, ok := TengoVMPool[tvm.key]; ok {
 		v.Put(tvm)
 	} else {
 		pool := sync.Pool{}
 		pool.Put(tvm)
-		TengoVMPool[tvm.name] = pool
+		TengoVMPool[tvm.key] = pool
 	}
 }
 
-func AcquireTengoMessage(name string, s *Shared) *TengoMessage {
-	v := TengoMessagePool.Get()
+func AcquireScriptMessage(name, t string, data map[string]interface{}) *ScriptMessage {
+	v := ScriptMessagePool.Get()
 	if v == nil {
-		return NewTengoMessage(name, s)
+		return NewScriptMessage(name, t, data)
 	}
-	tm := v.(*TengoMessage)
-	tm.Name = name
-	tm.s = s
+	tm := v.(*ScriptMessage)
+	tm.Key = name
+	tm.Type = t
+	tm.SetData(data)
 	return tm
 }
 
-func ReleaseTengoMessage(tm *TengoMessage) *Shared {
-	s := tm.Reset()
-	TengoMessagePool.Put(tm)
-	return s
+func ReleaseScriptMessage(tm *ScriptMessage) {
+	tm.Reset()
+	ScriptMessagePool.Put(tm)
 }
 
-func AcquireShared(data map[string]interface{}) *Shared {
-	v := SharedPool.Get()
-	if v == nil {
-		return &Shared{
-			Data: data,
-		}
-	}
-	s := v.(*Shared)
-	s.Data = data
-	return s
-}
+// func AcquireShared() *Shared {
+//  v := SharedPool.Get()
+//  if v == nil {
+//   ns := &Shared{
+//    Data: make(map[string]interface{}),
+//   }
+//   return ns
+//  }
+//  s := v.(*Shared)
+//  return s
+// }
 
-func ReleaseShared(s *Shared) {
-	s.Reset()
-	SharedPool.Put(s)
-}
+// func ReleaseShared(s *Shared) {
+//  ClearMap(s.Data)
+//  SharedPool.Put(s)
+// }

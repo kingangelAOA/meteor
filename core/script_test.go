@@ -3,9 +3,23 @@ package core
 import (
 	"context"
 	"encoding/json"
+	"fmt"
+	"meteor/models"
 	"testing"
 	"time"
 )
+
+var code = `
+fmt := import("fmt")
+json := import("json")
+ctx["num"] = ctx["num"]+2
+prints = append(prints, "1111111")
+prints = append(prints, "ssdfsdfsd")
+// fmt.println(ctx["c"])
+prints = append(prints, string(ctx["c"]))
+r := json.encode(ctx)
+ctx["aaaa"] = string(r)
+`
 
 func BenchmarkTengoScript(b *testing.B) {
 	parent := context.Background()
@@ -18,87 +32,58 @@ func BenchmarkTengoScript(b *testing.B) {
 	j := "{\"a\": \"b\", \"c\": 2, \"num\": 0}"
 	var d map[string]interface{}
 	json.Unmarshal([]byte(j), &d)
-	// fmt.Println(err.Error())
 	s := &Shared{
 		Data: d,
 	}
-	// fmt.Println(fmt.Printf("s:%p", s))
 	b.RunParallel(func(p *testing.PB) {
 		for p.Next() {
-
-			// fmt.Println(fmt.Printf("ns:%p", ns))
-			tm := AcquireTengoMessage("test", s.CopyShared())
+			ns := s.CopyShared()
+			tm := AcquireScriptMessage("test", TengoType, CopyMap(ns.Data))
+			tm.SetData(ns.Data)
 			ts.Execute(tm)
 			<-tm.Ok
-			// if !ok {
-			// 	fmt.Println("errr:", tm.ErrMsg)
-			// } else {
-			// 	fmt.Println("data:", tm.s.Data)
-			// }
+			ns.SetData(tm.GetData())
 			// fmt.Println("prints: ", tm.GetPrints())
-			cs := ReleaseTengoMessage(tm)
-			ReleaseShared(cs)
+			// fmt.Println("data: ", ns.Data)
+			ReleaseScriptMessage(tm)
+			// ReleaseShared(cs)
 		}
 	})
 	b.StopTimer()
 }
 
-func TestScriptServer(t *testing.T) {
+func BenchmarkScriptServer(b *testing.B) {
 	parent := context.Background()
 	ctx, cancel := context.WithTimeout(parent, 1000*time.Second)
 	defer cancel()
-	ss, _ := NewScriptService(newTengoScript(ctx), 1000, ctx)
+	ss, _ := NewScriptService(map[string][]models.BaseScript{TengoType: []models.BaseScript{models.BaseScript{
+		ID:   "xx",
+		Name: "test",
+		Code: code,
+	}}}, 1000, ctx)
 	ss.Run()
+	b.SetParallelism(20)
 	s := &Shared{
-		Data: map[string]interface{}{"test": "1", "num": 0},
+		Data: map[string]interface{}{"test": "1", "num": 0, "c": 2},
 	}
-	ns := s.CopyShared()
-	tm := AcquireTengoMessage("test", ns)
-	ss.PutMessage(tm)
-	<-tm.Ok
-	// if !ok {
-	// 	fmt.Println(tm.ErrMsg)
-	// } else {
-	// 	fmt.Println("data:", tm.s.Data)
-	// }
-	// fmt.Println("prints: ", tm.GetPrints())
-	nns := ReleaseTengoMessage(tm)
-	ReleaseShared(nns)
+	b.RunParallel(func(p *testing.PB) {
+		for p.Next() {
+			ns := s.CopyShared()
+			tm := AcquireScriptMessage("test_xx", TengoType, CopyMap(ns.Data))
+			ss.PutMessage(tm)
+			ok := <-tm.Ok
+			if !ok {
+				fmt.Println("error: ", tm.ErrMsg)
+			}
+			ns.SetData(tm.GetData())
+			// fmt.Println("prints: ", tm.GetPrints())
+			ReleaseScriptMessage(tm)
+		}
+	})
 }
-
-// func BenchmarkScriptServer(b *testing.B) {
-// 	parent := context.Background()
-// 	ctx, cancel := context.WithTimeout(parent, 1000*time.Second)
-// 	defer cancel()
-// 	ss, _ := NewScriptService(newTengoScript(ctx), 1000, ctx)
-// 	ss.Run()
-// 	b.SetParallelism(20)
-// 	s := &Shared{
-// 		Data: map[string]interface{}{"test": "1"},
-// 	}
-// 	b.RunParallel(func(p *testing.PB) {
-// 		for p.Next() {
-// 			tm := AcquireTengoMessage("test", s.CopyShared())
-// 			ss.PutMessage(tm)
-// 			<-tm.Ok
-// 			cs := ReleaseTengoMessage(tm)
-// 			ReleaseShared(cs)
-// 		}
-// 	})
-// }
 
 func newTengoScript(ctx context.Context) *TengoScript {
 	ts := NewTengoScript(ctx)
-	ts.AddScript("test", `
-	fmt := import("fmt")
-	json := import("json")
-	ctx["num"] = ctx["num"]+2
-	prints = append(prints, "1111111")
-	prints = append(prints, "ssdfsdfsd")
-	fmt.println(ctx["c"])
-	prints = append(prints, ctx["c"])
-	r := json.encode(ctx)
-	ctx["aaaa"] = string(r)
-	`)
+	ts.AddScript("test", code)
 	return ts
 }

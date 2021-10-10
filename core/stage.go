@@ -5,18 +5,30 @@ import (
 	"errors"
 )
 
+const (
+	SingleGoroutine   = "SingleGoroutine"
+	MultipleGoroutine = "MultipleGoroutine"
+)
+
 type Stage interface {
 	Run(p Shared)
 }
 
-func ConnectSingleCoroutineNode(nodes []Node, s Shared, ctx context.Context) (*SingleCoroutineStage, error) {
+type SingleCoroutineStage struct {
+	s         *Shared
+	beginNode Node
+	ctx       context.Context
+}
+
+func ConnectSingleCoroutineNode(nodes []Node, ctx context.Context, s *Shared, collect bool) (*SingleCoroutineStage, error) {
 	size := len(nodes)
 	if size == 0 {
 		return nil, errors.New("must be at least one node")
 	}
 	for i := 0; i < size; i++ {
 		if i < size-1 {
-			nodes[i].SetNode(nodes[i+1])
+			nodes[i].SetCollect(collect)
+			nodes[i].SetNext(nodes[i+1])
 		}
 	}
 	return &SingleCoroutineStage{
@@ -26,34 +38,13 @@ func ConnectSingleCoroutineNode(nodes []Node, s Shared, ctx context.Context) (*S
 	}, nil
 }
 
-func ConnectMultiCoroutineNode(t string, nodes []Node, num, per int, ctx context.Context, s Shared) (*MultiCoroutineStage, error) {
-	scs, err := ConnectSingleCoroutineNode(nodes, s, ctx)
-	if err != nil {
-		return nil, err
-	}
-	mcs := &MultiCoroutineStage{
-		limiter: NewLimiter(t, per, ctx),
-		ctx:     ctx,
-		errMsg:  make(chan string, MessageThreshold),
-	}
-	p, err := NewPool(num, ctx, func() {
-		scs.Run()
-	})
-	if err != nil {
-		return nil, err
-	}
-	mcs.p = p
-	return mcs, nil
+func (mcs *SingleCoroutineStage) Run() {
+	mcs.beginNode.Execute(mcs.s)
 }
 
-type SingleCoroutineStage struct {
-	s         Shared
-	beginNode Node
-	ctx       context.Context
-}
+func (mcs *SingleCoroutineStage) getStat(statCh func(chan Stat)) {
+	// statCh()1
 
-func (mcs *SingleCoroutineStage) Run() error {
-	return mcs.beginNode.Execute(&mcs.s)
 }
 
 type MultiCoroutineStage struct {
@@ -61,8 +52,41 @@ type MultiCoroutineStage struct {
 	limiter Limiter
 	ctx     context.Context
 	errMsg  chan string
+	se      *StatisticsEngine
 }
 
-func (scs *MultiCoroutineStage) Run(s Shared) {
-	scs.p.RunByLimit(scs.limiter, s)
+func ConnectMultiCoroutineNode(t string, nodes []Node, num, per int, ctx context.Context, s *Shared) (*MultiCoroutineStage, error) {
+	scs, err := ConnectSingleCoroutineNode(nodes, ctx, s, true)
+	if err != nil {
+		return nil, err
+	}
+
+	mcs := &MultiCoroutineStage{
+		limiter: NewLimiter(t, per, ctx),
+		ctx:     ctx,
+		errMsg:  make(chan string, MessageThreshold),
+	}
+	se := NewStatisticalEngine()
+	for _, n := range nodes {
+		se.add(n.GetID(), ctx)
+		n.SetStatCall(mcs.stat)
+	}
+	mcs.se = se
+	p, err := NewPool(num, ctx, func() {
+		scs.Run()
+	})
+	if err != nil {
+		return nil, err
+	}
+	mcs.p = p
+	mcs.run()
+	return mcs, nil
+}
+
+func (mcs *MultiCoroutineStage) run() {
+	mcs.p.RunByLimit(mcs.limiter)
+}
+
+func (mcs *MultiCoroutineStage) stat(id string, s Stat) {
+	mcs.se.pushStat(id, s)
 }

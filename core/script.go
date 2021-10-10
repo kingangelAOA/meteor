@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"meteor/models"
 	"time"
 
 	"github.com/d5/tengo/v2"
@@ -17,25 +18,26 @@ const (
 	ScriptPrints    = "prints"
 	ErrMsgThreshold = 1000
 	ExpiryDuration  = 60
+	TengoType       = "TENGO"
 )
 
 var (
 	ErrorNewScriptServerPool = errors.New("new script pool error")
+	DefaultScriptService     *ScriptService
 )
-
-// func init() {
-// 	TengoVMPool = make(map[string]*sync.Pool)
-// 	TengoMessagePool = &sync.Pool{}
-// }
 
 type ScriptService struct {
 	BaseService
-	script Script
+	scripts map[string]Script
 }
 
-func NewScriptService(s Script, num int, ctx context.Context) (*ScriptService, error) {
+func NewScriptService(nodes models.ScriptNode, num int, ctx context.Context) (*ScriptService, error) {
+	scripts, err := getMapScripts(nodes, ctx)
+	if err != nil {
+		return nil, err
+	}
 	ss := &ScriptService{
-		script: s,
+		scripts: scripts,
 	}
 	p, err := ants.NewPool(num, ants.WithPanicHandler(func(p interface{}) {
 		ss.PutErrMsg(fmt.Sprintf("worker exits from a panic: %v\n", p))
@@ -46,6 +48,14 @@ func NewScriptService(s Script, num int, ctx context.Context) (*ScriptService, e
 	bs := NewBaseService(p, ctx)
 	ss.BaseService = *bs
 	return ss, nil
+}
+
+func (ss *ScriptService) getScript(name, t string) (Script, error) {
+	script, ok := ss.scripts[t]
+	if !ok {
+		return nil, fmt.Errorf("no script of this type '%s' was found", t)
+	}
+	return script, nil
 }
 
 func (ss *ScriptService) Run() {
@@ -76,35 +86,44 @@ func (ss *ScriptService) messageQueue() {
 		case <-ss.ctx.Done():
 			return
 		case pm := <-ss.ms:
-			err := ss.p.Submit(func() {
-				ss.script.Execute(pm)
-			})
+			sm := pm.(*ScriptMessage)
+			s, err := ss.getScript(sm.Key, sm.Type)
 			if err != nil {
 				pm.SetErr(err.Error())
+			} else {
+				err := ss.p.Submit(func() {
+					s.Execute(pm)
+				})
+				if err != nil {
+					pm.SetErr(err.Error())
+				}
 			}
 		}
 	}
 }
 
-type TengoMessage struct {
+type ScriptMessage struct {
 	BaseMessage
-	Name string
+	Key  string
+	Type string
 }
 
-func NewTengoMessage(name string, s *Shared) *TengoMessage {
-	return &TengoMessage{
-		Name:        name,
-		BaseMessage: NewBaseMessage(s),
+func NewScriptMessage(key, t string, data map[string]interface{}) *ScriptMessage {
+	return &ScriptMessage{
+		Key:         key,
+		Type:        t,
+		BaseMessage: NewBaseMessage(data),
 	}
 }
 
-func (tm *TengoMessage) Reset() *Shared {
-	tm.Name = ""
-	return tm.BaseMessage.reset()
+func (tm *ScriptMessage) Reset() {
+	tm.Key = ""
+	tm.Type = ""
+	tm.BaseMessage.reset()
 }
 
-func (tm *TengoMessage) GetName() string {
-	return tm.Name
+func (tm *ScriptMessage) GetKey() string {
+	return tm.Key
 }
 
 type Script interface {
@@ -118,7 +137,7 @@ type TengoScript struct {
 }
 
 type TengoVM struct {
-	name   string
+	key    string
 	script *tengo.Script
 }
 
@@ -126,28 +145,21 @@ func (tvm *TengoVM) Reset() {
 }
 
 func (tvm *TengoVM) Run(m Message, ctx context.Context) {
-	tvm.script.Add(ScriptCtx, m.GetShared().Data)
+	defer m.TimeCost()
+	tvm.script.Add(ScriptCtx, m.GetData())
 	tvm.script.Add(ScriptPrints, []interface{}{})
-	// f := os.NewFile(1, "cache")
-	// old := os.Stdout
-	// os.Stdout = f
 	compiled, err := tvm.script.RunContext(ctx)
-	// f.Sync()
-	// os.Stdout = old
-	// b, _ := ioutil.ReadAll(f)
-	// fmt.Println("*******", f)
 	errMsg := []string{}
 	if err != nil {
 		errMsg = append(errMsg, fmt.Sprintf("tengo script run error: %s", err.Error()))
 	}
 	if nil != compiled {
 		if v, ok := compiled.Get(ScriptCtx).Value().(map[string]interface{}); ok {
-			m.SetShared(v)
+			m.SetData(v)
 		} else {
 			errMsg = append(errMsg, "tengo script run error: ctx is not map")
 		}
 		if out, ok := compiled.Get(ScriptPrints).Value().([]interface{}); ok {
-
 			buffer := bytes.Buffer{}
 			for _, v := range out {
 				s, err := ToString(v)
@@ -162,7 +174,6 @@ func (tvm *TengoVM) Run(m Message, ctx context.Context) {
 			errMsg = append(errMsg, "tengo script run error: prints is not slice")
 		}
 	}
-
 	if len(errMsg) > 0 {
 		buffer := bytes.Buffer{}
 		for _, v := range errMsg {
@@ -193,11 +204,30 @@ func (ts *TengoScript) AddScript(name, code string) {
 }
 
 func (ts *TengoScript) Execute(m Message) {
-	if code, ok := ts.scriptMap[m.GetName()]; ok {
-		tvm := AcquireTengoVM(m.GetName(), code)
+	key := m.GetKey()
+	if code, ok := ts.scriptMap[key]; ok {
+		tvm := AcquireTengoVM(key, code)
 		tvm.Run(m, ts.ctx)
 		ReleaseTengoVM(tvm)
 	} else {
-		m.SetErr(fmt.Sprintf("script '%s' is not exist", m.GetName()))
+		m.SetErr(fmt.Sprintf("script '%s' is not exist", key))
 	}
+}
+
+func getMapScripts(nodes models.ScriptNode, ctx context.Context) (map[string]Script, error) {
+	ms := make(map[string]Script)
+	for k, bNodes := range nodes {
+		if k == TengoType {
+			nts := NewTengoScript(ctx)
+			for _, node := range bNodes {
+				k, err := GetScriptKey(node.ID, node.Name)
+				if err != nil {
+					return nil, err
+				}
+				nts.AddScript(k, node.Code)
+			}
+			ms[k] = nts
+		}
+	}
+	return ms, nil
 }

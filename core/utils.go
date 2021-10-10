@@ -53,10 +53,23 @@ func ToString(v interface{}) (string, error) {
 	}
 }
 
-func CopyMap(data map[string]interface{}) map[string]interface{} {
+func CopyMap(m map[string]interface{}) map[string]interface{} {
 	n := make(map[string]interface{})
-	for k, v := range data {
+	for k, v := range m {
 		n[k] = v
 	}
 	return n
+}
+
+func ClearMap(m map[string]interface{}) {
+	for k := range m {
+		delete(m, k)
+	}
+}
+
+func GetScriptKey(id, name string) (string, error) {
+	if id == "" || name == "" {
+		return "", errors.New("id and name are required")
+	}
+	return fmt.Sprintf("%s_%s", name, id), nil
 }

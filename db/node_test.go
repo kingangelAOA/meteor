@@ -6,9 +6,9 @@ import (
 	"testing"
 )
 
-func init() {
+func Init() {
 	m := configs.Mongo{
-		User:     "kinganel",
+		User:     "kingangel",
 		Password: "123456",
 		Host:     "127.0.0.1",
 		Port:     "27017",
@@ -17,8 +17,8 @@ func init() {
 	}
 	InitMongo(m)
 }
-
 func TestNode(t *testing.T) {
+	Init()
 	ctx, cancel, c := getCollection("node")
 	defer cancel()
 	id, err := c.InsertOne(ctx, &Node{Name: "test", Type: "SCRIPT"})

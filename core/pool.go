@@ -42,7 +42,7 @@ func (wp *WrappedPool) SetNum(n int) {
 	wp.p.Tune(n)
 }
 
-func (rp *WrappedPool) RunByLimit(l Limiter, data interface{}) {
+func (rp *WrappedPool) RunByLimit(l Limiter) {
 	go func(l Limiter) {
 		for {
 			err := l.Get()
