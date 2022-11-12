@@ -1,0 +1,19 @@
+mongo:
+  user: kingangel
+  password: 123456
+  host: 127.0.0.1
+  port: 27017
+  db: meteor
+  timeout: 3000
+  collections:
+    - name: point
+      opt:
+        timeseries:
+          timeField: timestamp
+          metaField: metadata
+          granularity: seconds
+      indexes:
+        - timestamp
+log:
+  filePath: log
+  fileName: sys.log

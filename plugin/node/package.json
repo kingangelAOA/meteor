@@ -1,0 +1,6 @@
+{
+	"dependencies": {
+		"grpc": "^1.24.11",
+		"grpc-health-check": "^1.8.0"
+	}
+}

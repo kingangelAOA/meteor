@@ -1,0 +1,11 @@
+go 1.19
+
+use (
+	./algorithm
+	./common
+	./engine
+	./mongoutil
+	./plugin
+	./test
+	./web
+)

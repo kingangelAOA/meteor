@@ -1,0 +1,8 @@
+{
+    "go.testFlags": [
+        "-v",
+        "-count=1"
+    ],
+    "go.goroot": "/Users/eleme/.gvm/gos/go1.19",
+    "go.gopath": "/Users/eleme/go",
+}
