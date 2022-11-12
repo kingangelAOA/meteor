@@ -2,7 +2,7 @@ module common
 
 go 1.19
 
-require go.mongodb.org/mongo-driver v1.10.3
+require go.mongodb.org/mongo-driver v1.11.0
 
 require (
 	github.com/google/go-cmp v0.5.6 // indirect

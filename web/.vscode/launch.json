@@ -12,7 +12,7 @@
             "program": "${workspaceRoot}",
             "args": [
                 "-PluginRootPath",
-                "/Users/eleme/meteor/plugin"
+                "/Users/kingangelTOT/meteor/plugin"
             ]
         }
     ]

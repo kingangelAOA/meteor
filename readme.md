@@ -20,15 +20,24 @@
 支持: go, python
 待支持: java, javascript
 
+/plugin/python python 插件路径, 平台运行前, 运行 pip3 install -r req.txt
+
 #### 编译平台前端
+进入 meteor/web/client
 
 ```shell
-go-bindata -o=asset/static/static.go -pkg=static -prefix=client/dist/static client/dist/static/...
+1.npm install
+2. npm run build
 ```
+
+#### 编译平台后端
 ```shell
-go-bindata -o=asset/index/index.go -pkg=index -prefix=client/dist client/dist/favicon.ico client/dist/index.html
+1. go-bindata -o=asset/static/static.go -pkg=static -prefix=client/dist/static client/dist/static/...
+2. go-bindata -o=asset/index/index.go -pkg=index -prefix=client/dist client/dist/favicon.ico client/dist/index.html
+3. go build web/main.go
 ```
 
-#### plugin
-
-####
+#### 运行
+```shell
+./main
+```

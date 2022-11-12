@@ -13,7 +13,7 @@
             "args": [
                 "-gcflags='all=-N -l'",
                 "-PluginRootPath",
-                "/Users/eleme/meteor/plugin"
+                "/Users/kingangelTOT/work2/meteor/plugin"
             ]
         },
         {
@@ -22,9 +22,7 @@
             "request": "launch",
             "mode": "auto",
             "program": "${workspaceRoot}/test",
-            "args": [
-                
-            ]
+            "args": []
         }
     ]
 }
