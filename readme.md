@@ -2,8 +2,7 @@
 
 测试平台的能力是可扩展的, 能力取决于框架中插件的能力, 此平台支持插件化开发, 然后编排加载插件的节点来提供测试能力, 假如插件支持前端自动化测试, 那么这个平台自然而然的支持前端自动化测试.以此类推
 
-[![Watch the video](https://github.com/kingangelAOA/meteor/blob/main/doc/演示图片.png)]
-
+[![Watch the video](https://github.com/kingangelAOA/meteor/blob/main/doc/演示图片.png)
 
 #### 项目结构
 
