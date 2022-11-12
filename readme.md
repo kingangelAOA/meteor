@@ -4,7 +4,7 @@
 
 
 
-[![Watch the video](https://github.com/kingangelAOA/meteor/blob/main/doc/%E6%BC%94%E7%A4%BA%E5%9B%BE%E7%89%87.png)](https://github.com/kingangelAOA/meteor/blob/main/doc/%E6%BC%94%E7%A4%BA.mov)
+[![Watch the video](https://github.com/kingangelAOA/meteor/blob/main/doc/%E6%BC%94%E7%A4%BA.mov)]
 
 #### 项目结构
 
